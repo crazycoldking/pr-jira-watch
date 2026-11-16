@@ -95,7 +95,7 @@ Left bar: green = mergeable, red = CI fail or conflict, yellow = needs attention
 **Jira row**: key, type, title, status, priority, and a rollup of linked PRs (`2 PR ✔`, `1 PR ✖`, `1 PR merged`, `No linked PR`).
 
 Also:
-- **Language**: `EN` / `中文` button, default Chinese, kept in `localStorage`.
+- **Language**: `EN` / `CN` button, default English, kept in `localStorage`.
 - **Interval**: 30s to 30m picker, default 5m, kept in `localStorage`.
 - **Copy**: one-click copy of the PR / Jira link on every row.
 - **Tab title** carries the alarm: `✖2 ⚠1 ✔3 · PR & JIRA Watch · 12 PR`.
