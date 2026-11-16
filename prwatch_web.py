@@ -250,7 +250,7 @@ zh:{loading:"加载中…",refresh:"刷新",refreshNow:"立即刷新",switchTo:"
  withDraft:n=>`（含 ${n} 草稿）`,noLinked:"无关联 PR",nMerged:n=>`${n} PR 已 merge`,nDraft:n=>`${n} PR 草稿`,conflictTag:"⚠冲突",linkedPrs:"关联 PR: ",
  metaLoad:"刷新中…",metaErr:"连接失败，重试中…",metaOk:(t,n)=>`更新于 ${t} · ${n}s 后刷新`,metaStale:a=>`刷新中…（当前显示 ${a} 前的数据）`,
  jiraFail:"Jira 刷新失败: ",refreshFail:"刷新失败: ",connFail:"无法连接服务: ",
- grpPr:"Pull Requests",grpJira:"Jira", revReq:"待Review",tipCi:"CI 状态:",tipReview:"Review 状态:",tipMerge:"合并状态:"},
+ grpPr:"PRs",grpJira:"JIRAs", revReq:"待Review",tipCi:"CI 状态:",tipReview:"Review 状态:",tipMerge:"合并状态:"},
 en:{loading:"Loading…",refresh:"Refresh",refreshNow:"Refresh now",switchTo:"中文",
  ciOk:"✔ CI passed",ciFail:"✖ CI failed",ciError:"✖ CI error",ciPending:"● CI running",ciExpected:"● CI waiting",ciNone:"CI none",
  rvChanges:n=>`✖ Changes requested (${n})`,rvRequired:"… Review needed",rvNone:"No review",
@@ -266,7 +266,7 @@ en:{loading:"Loading…",refresh:"Refresh",refreshNow:"Refresh now",switchTo:"�
  withDraft:n=>` (incl. ${n} draft)`,noLinked:"No linked PR",nMerged:n=>`${n} PR merged`,nDraft:n=>`${n} PR draft`,conflictTag:"⚠conflict",linkedPrs:"Linked PRs: ",
  metaLoad:"Refreshing…",metaErr:"Connection failed, retrying…",metaOk:(t,n)=>`Updated ${t} · refresh in ${n}s`,metaStale:a=>`Refreshing… (showing data from ${a} ago)`,
  jiraFail:"Jira refresh failed: ",refreshFail:"Refresh failed: ",connFail:"Cannot reach server: ",
- grpPr:"Pull Requests",grpJira:"Jira", revReq:"Review requested",tipCi:"CI status:",tipReview:"Review status:",tipMerge:"Merge status:"}};
+ grpPr:"PRs",grpJira:"JIRAs", revReq:"Review requested",tipCi:"CI status:",tipReview:"Review status:",tipMerge:"Merge status:"}};
 let lang="zh";try{const v=localStorage.getItem("prwatch.lang");if(v==="zh"||v==="en")lang=v}catch(_){}
 const L=(k,...a)=>{const v=I18N[lang][k];return typeof v==="function"?v(...a):v};
 let listErr=null,connErr=null;
