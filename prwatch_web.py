@@ -184,8 +184,14 @@ button:hover,select:hover{border-color:var(--ok);color:var(--ok)}
 .stat.k-jira{border-left:4px solid var(--jira)}.stat.k-sdet{border-left:4px solid var(--sdet)}.stat.k-backlog{border-left:4px solid var(--orange)}
 .stat.k-jira.on{outline-color:var(--jira)}.stat.k-sdet.on{outline-color:var(--sdet)}.stat.k-backlog.on{outline-color:var(--orange)}
 .stat.k-jira b{color:var(--jira)}.stat.k-sdet b{color:var(--sdet)}.stat.k-backlog b{color:var(--orange)}
-.statrow{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.statrow>.stats{display:contents}
-.statrow>.stats2>.stat:first-child{margin-left:auto;padding-left:26px} /* Jira 组右对齐，与 PR 组至少留出间隔 */
+/* 侧栏导航布局: 卡片竖排在左侧作为筛选导航，右侧为列表区 */
+.layout{display:grid;grid-template-columns:230px 1fr;gap:14px;align-items:start}
+.sidenav{position:sticky;top:64px;display:flex;flex-direction:column;gap:6px}
+.sidenav .stat{justify-content:space-between;padding:9px 12px;white-space:normal}
+.sidenav .stat b{font-size:14px}
+.sidenav .grp{color:var(--mute);font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:10px 12px 2px}.sidenav .grp:first-child{padding-top:2px}
+.maincol{min-width:0}
+@media(max-width:900px){.layout{grid-template-columns:1fr}.sidenav{position:static;flex-direction:row;flex-wrap:wrap}.sidenav .grp{display:none}}
 .stat{display:flex;align-items:baseline;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:3px;padding:5px 12px;cursor:pointer;white-space:nowrap;transition:border-color .15s,background .15s}
 .stat:hover{border-color:#2f4a38;background:#101912}
 .stat.on{outline:1px solid var(--acc);background:rgba(90,212,255,.06)}
@@ -219,7 +225,7 @@ a.b:hover{filter:brightness(1.3)}
 <span class="pill load" id="pill"><i></i><span id="meta">…</span></span>
 <select id="iv"><option value="30">30s</option><option value="60">60s</option><option value="300" selected>5m</option><option value="600">10m</option><option value="1800">30m</option></select>
 <button id="lang" title="中文 / English">EN</button><button id="rf"><span>↻</span> <em id="rft" style="font-style:normal"></em></button></header>
-<div id="err"></div><div class="statrow"><div class="stats" id="stats"></div><div class="stats stats2" id="stats2"></div></div><div class="hint" id="hint"></div><div class="list" id="list"></div>
+<div id="err"></div><div class="layout"><nav class="sidenav" id="stats"></nav><div class="maincol"><div class="hint" id="hint"></div><div class="list" id="list"></div></div></div>
 </div>
 <script>
 const CP='<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.78.78 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .14.11.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .78 5.78 0 6.75 0h7.5C15.22 0 16 .78 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .14.11.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>',
@@ -244,7 +250,7 @@ zh:{loading:"加载中…",refresh:"刷新",refreshNow:"立即刷新",switchTo:"
  withDraft:n=>`（含 ${n} 草稿）`,noLinked:"无关联 PR",nMerged:n=>`${n} PR 已 merge`,nDraft:n=>`${n} PR 草稿`,conflictTag:"⚠冲突",linkedPrs:"关联 PR: ",
  metaLoad:"刷新中…",metaErr:"连接失败，重试中…",metaOk:(t,n)=>`更新于 ${t} · ${n}s 后刷新`,metaStale:a=>`刷新中…（当前显示 ${a} 前的数据）`,
  jiraFail:"Jira 刷新失败: ",refreshFail:"刷新失败: ",connFail:"无法连接服务: ",
- revReq:"待Review",tipCi:"CI 状态:",tipReview:"Review 状态:",tipMerge:"合并状态:"},
+ grpPr:"Pull Requests",grpJira:"Jira", revReq:"待Review",tipCi:"CI 状态:",tipReview:"Review 状态:",tipMerge:"合并状态:"},
 en:{loading:"Loading…",refresh:"Refresh",refreshNow:"Refresh now",switchTo:"中文",
  ciOk:"✔ CI passed",ciFail:"✖ CI failed",ciError:"✖ CI error",ciPending:"● CI running",ciExpected:"● CI waiting",ciNone:"CI none",
  rvChanges:n=>`✖ Changes requested (${n})`,rvRequired:"… Review needed",rvNone:"No review",
@@ -260,7 +266,7 @@ en:{loading:"Loading…",refresh:"Refresh",refreshNow:"Refresh now",switchTo:"�
  withDraft:n=>` (incl. ${n} draft)`,noLinked:"No linked PR",nMerged:n=>`${n} PR merged`,nDraft:n=>`${n} PR draft`,conflictTag:"⚠conflict",linkedPrs:"Linked PRs: ",
  metaLoad:"Refreshing…",metaErr:"Connection failed, retrying…",metaOk:(t,n)=>`Updated ${t} · refresh in ${n}s`,metaStale:a=>`Refreshing… (showing data from ${a} ago)`,
  jiraFail:"Jira refresh failed: ",refreshFail:"Refresh failed: ",connFail:"Cannot reach server: ",
- revReq:"Review requested",tipCi:"CI status:",tipReview:"Review status:",tipMerge:"Merge status:"}};
+ grpPr:"Pull Requests",grpJira:"Jira", revReq:"Review requested",tipCi:"CI status:",tipReview:"Review status:",tipMerge:"Merge status:"}};
 let lang="zh";try{const v=localStorage.getItem("prwatch.lang");if(v==="zh"||v==="en")lang=v}catch(_){}
 const L=(k,...a)=>{const v=I18N[lang][k];return typeof v==="function"?v(...a):v};
 let listErr=null,connErr=null;
@@ -289,8 +295,10 @@ const tabs=[["all",()=>true],["fail",p=>["FAILURE","ERROR"].includes(p.ci)],["re
  ["jira",()=>false],["sdet",()=>false],["backlog",()=>false]];
 function render(){
  const card=([k,f])=>`<div class="stat k-${k} ${filter===k?"on":""}" data-k="${k}" title="${esc(L("tabd_"+k))}"><b>${k==="jira"?jira.length:k==="sdet"?sdet.length:k==="backlog"?backlog.length:k==="torev"?torev.length:data.filter(f).length}</b><span>${L("tab_"+k)}</span></div>`;
- $("stats").innerHTML=tabs.filter(t=>!["jira","sdet","backlog"].includes(t[0])).map(card).join("");
- $("stats2").innerHTML=tabs.filter(t=>["jira","sdet","backlog"].includes(t[0])).map(card).join("");
+ const grp=t=>({jira:"JIRA",sdet:"JIRA",backlog:"JIRA"})[t[0]]||"PR";
+ let nav="",g="";
+ for(const t of tabs){if(grp(t)!==g){g=grp(t);nav+=`<div class="grp">${g==="JIRA"?L("grpJira"):L("grpPr")}</div>`}nav+=card(t)}
+ $("stats").innerHTML=nav;
  $("hint").textContent=L("tabd_"+filter);
  if(["jira","sdet","backlog"].includes(filter))return renderJira();
  if(filter==="torev")return renderTorev();
@@ -364,7 +372,7 @@ async function load(){
 $("list").onclick=async e=>{const b=e.target.closest(".cp");if(!b)return;const u=b.dataset.url;
  try{await navigator.clipboard.writeText(u)}catch(_){const t=document.createElement("textarea");t.value=u;document.body.appendChild(t);t.select();document.execCommand("copy");t.remove()}
  b.classList.add("done");b.innerHTML=OK;b.title=L("copied");setTimeout(()=>{b.classList.remove("done");b.innerHTML=CP;b.title=L(filter==="jira"||filter==="sdet"?"copyJira":"copyPr")},1500)};
-$("stats").onclick=$("stats2").onclick=e=>{const s=e.target.closest(".stat");if(s){filter=s.dataset.k;setErr();render()}};
+$("stats").onclick=e=>{const s=e.target.closest(".stat");if(s){filter=s.dataset.k;setErr();render()}};
 $("lang").onclick=()=>{lang=lang==="zh"?"en":"zh";try{localStorage.setItem("prwatch.lang",lang)}catch(_){}applyLang();setErr();paint()};
 $("rf").onclick=load;$("iv").onchange=()=>{try{localStorage.setItem("prwatch.iv",$("iv").value)}catch(_){}load()};setInterval(()=>{if(data.length)render()},30000);setInterval(tick,1000);
 try{const v=localStorage.getItem("prwatch.iv");if([...$("iv").options].some(o=>o.value===v))$("iv").value=v}catch(_){} // 记住上次选的刷新间隔
