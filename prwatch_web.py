@@ -267,7 +267,7 @@ en:{loading:"Loading…",refresh:"Refresh",refreshNow:"Refresh now",switchTo:"CN
  metaLoad:"Refreshing…",metaErr:"Connection failed, retrying…",metaOk:(t,n)=>`Updated ${t} · refresh in ${n}s`,metaStale:a=>`Refreshing… (showing data from ${a} ago)`,
  jiraFail:"Jira refresh failed: ",refreshFail:"Refresh failed: ",connFail:"Cannot reach server: ",
  grpPr:"PRs",grpJira:"JIRAs", revReq:"Review requested",tipCi:"CI status:",tipReview:"Review status:",tipMerge:"Merge status:"}};
-let lang="zh";try{const v=localStorage.getItem("prwatch.lang");if(v==="zh"||v==="en")lang=v}catch(_){}
+let lang="en";try{const v=localStorage.getItem("prwatch.lang");if(v==="zh"||v==="en")lang=v}catch(_){}
 const L=(k,...a)=>{const v=I18N[lang][k];return typeof v==="function"?v(...a):v};
 let listErr=null,connErr=null;
 function setErr(){const e=connErr?L("connFail")+connErr:filter==="torev"?(torevErr&&L("refreshFail")+torevErr):(filter==="jira"||filter==="sdet")?(jiraErr&&L("jiraFail")+jiraErr):(listErr&&L("refreshFail")+listErr);$("err").innerHTML=e?`<div class="err">${esc(e)}</div>`:""}
