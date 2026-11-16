@@ -20,7 +20,7 @@ Pure Python 3 stdlib. It shells out to `gh`, `acli` and `twg`, so it reuses the 
 
 ![PR view](docs/pr-view-en.png)
 
-Cards are filters. The left bar colour is urgency. The `EN` / `中文` button switches the language and is remembered.
+Cards are filters. The left bar colour is urgency. The `EN` / `中文` button switches the language and is remembered. PR rows keep their detail badges (CI / review / merge / Jira / backport) no matter which card is selected.
 
 ## Contents
 
@@ -66,6 +66,7 @@ tmux kill-session -t prwatch-web && ./start.sh   # restart after editing the cod
 **Jira** (JQL via `acli`):
 - `assignee = currentUser() AND statusCategory = "In Progress"`
 - `SDET = currentUser() AND statusCategory != Done`
+- `assignee = currentUser() AND status = "Backlog"`
 
 A PR's Jira key is guessed from, in order: branch name, title, PR body (`/browse/KEY`, then `Jira: KEY`, then bare `KEY-123`).
 
@@ -83,13 +84,10 @@ Hover a card for its definition. The grey `#` line under the cards repeats it.
 |---|---|---|
 | Open PRs | 未合并 PR | every open PR, drafts included |
 | CI-fail PRs | CI 失败 PR | CI is `FAILURE` / `ERROR` |
-| Conflict PRs | 有冲突 PR | merge conflict with base |
-| Needs-review PRs | 等 Review 的 PR | review required, not a draft |
 | Mergeable PRs | 可合并 PR | passes the [mergeable rule](#the-mergeable-rule) |
-| Backport PRs | Backport PR | title or branch says backport |
-| Draft PRs | 草稿 PR | draft |
-| My Jira | 我负责的 Jira | assignee = me, In Progress |
-| My SDET Jira | 我是 SDET 的 Jira | SDET = me, not Done |
+| Jira (Active) | Jira（工作中） | assignee = me, In Progress |
+| SDET Jira | SDET Jira | SDET = me, not Done |
+| Backlog Jira | Backlog 的 Jira | assignee = me, status = Backlog |
 
 **PR row**: `repo#number`, title, CI badge, review badge, merge badge, Jira link, backport info, age.
 Left bar: green = mergeable, red = CI fail or conflict, yellow = needs attention. Most urgent first.
@@ -201,7 +199,7 @@ Binds to `127.0.0.1` only. A 15s server-side cache means ten open tabs cost one 
 | Page says `Cannot reach server` / `无法连接服务` | `tmux ls`, then `./start.sh` |
 | `Refresh failed` | `gh auth status` |
 | `Jira refresh failed` | `acli jira auth status` |
-| `linked-PR lookup failed` | `twg` missing or logged out. Jira rows still work, only the linked-PR rollup is empty |
+| `linked-PR lookup failed: twg failed: ...` | `twg` missing or logged out, or a transient Jira API error — the message now shows the real cause. Jira rows still work, only the linked-PR rollup is empty |
 | Port 8765 busy | `./prwatch_web.py -p 8766` |
 | No desktop toasts | the TUI session sends them, check `tmux attach -t prwatch`. Try `./prwatch.py --test-notify` |
 | Page looks stale after a code edit | restart `prwatch-web`. Open pages reload themselves on the next poll |

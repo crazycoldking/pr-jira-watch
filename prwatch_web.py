@@ -26,7 +26,7 @@ def favicon_svg():
     return ('<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 180 180">'
             '<clipPath id="c"><circle cx="90" cy="90" r="90"/></clipPath>'
             f'<image width="180" height="180" clip-path="url(#c)" href="{img}" xlink:href="{img}"/></svg>').encode()
-CACHE = {"ts": 0, "data": None, "err": None, "jira": [], "sdet": [], "jprs": {}, "jerr": None}
+CACHE = {"ts": 0, "data": None, "err": None, "jira": [], "sdet": [], "backlog": [], "torev": [], "terr": None, "jprs": {}, "jerr": None}
 LOCK = threading.Lock()
 # 上一次抓取成功的完整快照: 内存 + 磁盘。页面打开时先拿它立即显示，不必等本次抓取(GitHub+Jira 要好几秒)。
 DISK = Path.home() / ".cache" / "prwatch" / "web_cache.json"
@@ -51,7 +51,7 @@ def load_snap():
     global SNAP
     try:
         s = json.loads(DISK.read_text())
-        CACHE.update(data=s["prs"], jira=s["jira"], sdet=s["sdet"], jprs=s["jiraPrs"])
+        CACHE.update(data=s["prs"], jira=s["jira"], sdet=s["sdet"], backlog=s.get("backlog", []), torev=s.get("torev", []), jprs=s["jiraPrs"])
         SNAP = s
     except (OSError, ValueError, KeyError, TypeError):
         SNAP = None
@@ -84,10 +84,16 @@ def get_data(org, jira_url, ttl):
                 CACHE["err"] = None
             except Exception as e:
                 CACHE["err"] = str(e)
+            try:  # 待 Review 的 PR 独立抓取与容错，不影响自己的 PR 列表
+                CACHE["torev"] = [to_item(p, jira_url) for p in prwatch.fetch_review_requested(org)]
+                CACHE["terr"] = None
+            except Exception as e:
+                CACHE["terr"] = str(e)
             try:  # Jira 单独容错，失败不影响 PR 列表
                 site = (jira_url or prwatch.jira_site() or "").rstrip("/")
                 CACHE["jira"] = [dict(j, url=f"{site}/browse/{j['key']}") for j in prwatch.fetch_jira()]
                 CACHE["sdet"] = [dict(j, url=f"{site}/browse/{j['key']}") for j in prwatch.fetch_jira(prwatch.JIRA_JQL_SDET)]
+                CACHE["backlog"] = [dict(j, url=f"{site}/browse/{j['key']}") for j in prwatch.fetch_jira(prwatch.JIRA_JQL_BACKLOG)]
                 CACHE["jerr"] = None
                 try:  # 关联 PR 取自 Jira 自身的 development 信息(不限作者)
                     CACHE["jprs"] = prwatch.fetch_jira_prs(list({j["key"] for j in CACHE["jira"] + CACHE["sdet"]}))
@@ -98,9 +104,9 @@ def get_data(org, jira_url, ttl):
             CACHE["ts"] = time.time()
             if CACHE["data"] is not None:
                 save_snap({"prs": CACHE["data"], "error": None, "fetchedAt": CACHE["ts"], "jira": CACHE["jira"],
-                           "sdet": CACHE["sdet"], "jiraPrs": CACHE["jprs"], "jiraError": None, "me": prwatch.me()})
+                           "sdet": CACHE["sdet"], "backlog": CACHE["backlog"], "torev": CACHE["torev"], "jiraPrs": CACHE["jprs"], "jiraError": None, "me": prwatch.me()})
         return {"prs": CACHE["data"] or [], "error": CACHE["err"], "fetchedAt": CACHE["ts"],
-                "jira": CACHE["jira"], "sdet": CACHE["sdet"], "jiraPrs": CACHE["jprs"], "jiraError": CACHE["jerr"]}
+                "jira": CACHE["jira"], "sdet": CACHE["sdet"], "backlog": CACHE["backlog"], "torev": CACHE["torev"], "torevError": CACHE["terr"], "jiraPrs": CACHE["jprs"], "jiraError": CACHE["jerr"]}
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -171,15 +177,15 @@ h1::after{content:"▌";margin-left:2px;animation:blink 1.1s steps(1) infinite}
 button,select{background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:3px;padding:5px 10px;font:inherit;cursor:pointer;transition:border-color .15s,color .15s}
 select option{background:var(--card);color:var(--fg)}
 button:hover,select:hover{border-color:var(--ok);color:var(--ok)}
-.stat.k-all{border-left:4px solid var(--acc)}.stat.k-fail{border-left:4px solid var(--bad)}.stat.k-conf{border-left:4px solid var(--orange)}
-.stat.k-wait{border-left:4px solid var(--warn)}.stat.k-ready{border-left:4px solid var(--ok)}.stat.k-bp,.stat.k-draft{border-left:4px solid var(--line)}
-.stat.k-fail.on{outline-color:var(--bad)}.stat.k-conf.on{outline-color:var(--orange)}.stat.k-wait.on{outline-color:var(--warn)}.stat.k-ready.on{outline-color:var(--ok)}
-.stat.k-fail b{color:var(--bad)}.stat.k-conf b{color:var(--orange)}.stat.k-wait b{color:var(--warn)}.stat.k-ready b{color:var(--ok)}
-.stat.k-jira{border-left:4px solid var(--jira)}.stat.k-sdet{border-left:4px solid var(--sdet)}
-.stat.k-jira.on{outline-color:var(--jira)}.stat.k-sdet.on{outline-color:var(--sdet)}
-.stat.k-jira b{color:var(--jira)}.stat.k-sdet b{color:var(--sdet)}
+.stat.k-all{border-left:4px solid var(--acc)}.stat.k-fail{border-left:4px solid var(--bad)}
+.stat.k-ready{border-left:4px solid var(--ok)}
+.stat.k-fail.on{outline-color:var(--bad)}.stat.k-ready.on{outline-color:var(--ok)}
+.stat.k-fail b{color:var(--bad)}.stat.k-ready b{color:var(--ok)}
+.stat.k-jira{border-left:4px solid var(--jira)}.stat.k-sdet{border-left:4px solid var(--sdet)}.stat.k-backlog{border-left:4px solid var(--orange)}
+.stat.k-jira.on{outline-color:var(--jira)}.stat.k-sdet.on{outline-color:var(--sdet)}.stat.k-backlog.on{outline-color:var(--orange)}
+.stat.k-jira b{color:var(--jira)}.stat.k-sdet b{color:var(--sdet)}.stat.k-backlog b{color:var(--orange)}
 .statrow{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.statrow>.stats{display:contents}
-.statrow>.stats2>.stat:first-child{margin-left:14px} /* PR 组与 Jira 组之间留一点间隔 */
+.statrow>.stats2>.stat:first-child{margin-left:auto;padding-left:26px} /* Jira 组右对齐，与 PR 组至少留出间隔 */
 .stat{display:flex;align-items:baseline;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:3px;padding:5px 12px;cursor:pointer;white-space:nowrap;transition:border-color .15s,background .15s}
 .stat:hover{border-color:#2f4a38;background:#101912}
 .stat.on{outline:1px solid var(--acc);background:rgba(90,212,255,.06)}
@@ -219,7 +225,7 @@ a.b:hover{filter:brightness(1.3)}
 const CP='<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M0 6.75C0 5.78.78 5 1.75 5h1.5a.75.75 0 0 1 0 1.5h-1.5a.25.25 0 0 0-.25.25v7.5c0 .14.11.25.25.25h7.5a.25.25 0 0 0 .25-.25v-1.5a.75.75 0 0 1 1.5 0v1.5A1.75 1.75 0 0 1 9.25 16h-7.5A1.75 1.75 0 0 1 0 14.25Z"/><path d="M5 1.75C5 .78 5.78 0 6.75 0h7.5C15.22 0 16 .78 16 1.75v7.5A1.75 1.75 0 0 1 14.25 11h-7.5A1.75 1.75 0 0 1 5 9.25Zm1.75-.25a.25.25 0 0 0-.25.25v7.5c0 .14.11.25.25.25h7.5a.25.25 0 0 0 .25-.25v-7.5a.25.25 0 0 0-.25-.25Z"/></svg>',
  OK='<svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0Z"/></svg>';
 const BUILD="__BUILD__";
-let jira=[],sdet=[],jprs={},jiraErr=null,data=[],filter="all",timer,fetchedAt=0,lastFail=new Set();
+let jira=[],sdet=[],backlog=[],torev=[],jprs={},jiraErr=null,torevErr=null,data=[],filter="all",timer,fetchedAt=0,lastFail=new Set();
 const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 function ago(t){let s=Math.max(0,Date.now()/1000-t/1000|0);for(const[u,n]of[["d",86400],["h",3600],["m",60]])if(s>=n)return(s/n|0)+u;return s+"s"}
@@ -229,33 +235,36 @@ zh:{loading:"加载中…",refresh:"刷新",refreshNow:"立即刷新",switchTo:"
  rvChanges:n=>`✖ 要求修改 (${n})`,rvRequired:"… 待 Review",rvNone:"无 Review",
  mgConflict:"⚠ 有冲突",mgDraft:"草稿，不可合并",mgReady:"可合并",mgBehind:"落后于 base，需更新",mgBlocked:"未满足合并条件",
  mgUnstable:"有检查未通过",mgHooks:"待合并检查",mgClean:"无冲突，但缺 Approve",mgUnknown:"合并状态未知",
- tab_all:"未合并 PR",tab_fail:"CI 失败 PR",tab_conf:"有冲突 PR",tab_wait:"等 Review 的 PR",tab_ready:"可合并 PR",tab_bp:"Backport PR",tab_draft:"草稿 PR",tab_jira:"我负责的 Jira",tab_sdet:"我是 SDET 的 Jira",
- tabd_all:"你名下所有还没 merge 的 PR（含草稿）",tabd_fail:"CI 检查失败或出错的 PR，需要修复后重跑",tabd_conf:"和目标分支有冲突的 PR，需要 rebase 或解决冲突",
- tabd_wait:"已就绪、正在等 reviewer 审核的 PR（不含草稿）",tabd_ready:"GitHub 判定可 merge（无冲突、必需检查全过、不落后 base）且已有人 Approve 的 PR",
- tabd_bp:"向 release 分支回合代码的 backport PR",tabd_draft:"还没准备好 review 的 Draft PR",tabd_jira:"Assignee 是你、状态为 In Progress 的 Jira",tabd_sdet:"SDET 字段是你、尚未完成的 Jira",
+ tab_all:"未合并 PR",tab_fail:"CI 失败 PR",tab_ready:"可合并 PR",tab_torev:"待 Review PR",tab_jira:"Jira（工作中）",tab_sdet:"SDET Jira",tab_backlog:"Backlog 的 Jira",
+ tabd_all:"你名下所有还没 merge 的 PR（含草稿）",tabd_fail:"CI 检查失败或出错的 PR，需要修复后重跑",tabd_ready:"GitHub 判定可 merge（无冲突、必需检查全过、不落后 base）且已有人 Approve 的 PR",tabd_torev:"请求你或 Gateway SDETs 团队 review 的 PR（去 review 或指派别人）",
+ tabd_jira:"Assignee 是你、状态为 In Progress 的 Jira",tabd_sdet:"SDET 字段是你、尚未完成的 Jira",
+ tabd_backlog:"Assignee 是你、还停在 Backlog 状态的 Jira（按优先级排序）",
  noJira:"无 Jira",origPr:n=>`原 PR #${n}`,botMade:"bot 创建",copyPr:"复制 PR 链接",copyJira:"复制 Jira 链接",copied:"已复制",
- updatedAgo:a=>`${a} 前更新`,emptyPr:"没有符合条件的 PR",emptySdet:"没有 SDET 是我的未完成 Jira",emptyJira:"没有 In Progress 的 Jira",
+ updatedAgo:a=>`${a} 前更新`,emptyPr:"没有符合条件的 PR",emptySdet:"没有 SDET 是我的未完成 Jira",emptyJira:"没有 In Progress 的 Jira",emptyBacklog:"没有 Backlog 状态的 Jira",emptyTorev:"没有请求你或 SDET 团队 review 的 PR",
  withDraft:n=>`（含 ${n} 草稿）`,noLinked:"无关联 PR",nMerged:n=>`${n} PR 已 merge`,nDraft:n=>`${n} PR 草稿`,conflictTag:"⚠冲突",linkedPrs:"关联 PR: ",
  metaLoad:"刷新中…",metaErr:"连接失败，重试中…",metaOk:(t,n)=>`更新于 ${t} · ${n}s 后刷新`,metaStale:a=>`刷新中…（当前显示 ${a} 前的数据）`,
- jiraFail:"Jira 刷新失败: ",refreshFail:"刷新失败: ",connFail:"无法连接服务: "},
+ jiraFail:"Jira 刷新失败: ",refreshFail:"刷新失败: ",connFail:"无法连接服务: ",
+ revReq:"待Review",tipCi:"CI 状态:",tipReview:"Review 状态:",tipMerge:"合并状态:"},
 en:{loading:"Loading…",refresh:"Refresh",refreshNow:"Refresh now",switchTo:"中文",
  ciOk:"✔ CI passed",ciFail:"✖ CI failed",ciError:"✖ CI error",ciPending:"● CI running",ciExpected:"● CI waiting",ciNone:"CI none",
  rvChanges:n=>`✖ Changes requested (${n})`,rvRequired:"… Review needed",rvNone:"No review",
  mgConflict:"⚠ Conflict",mgDraft:"Draft, not mergeable",mgReady:"Mergeable",mgBehind:"Behind base, update needed",mgBlocked:"Merge requirements not met",
  mgUnstable:"Some checks failing",mgHooks:"Pre-merge checks pending",mgClean:"No conflict, needs approval",mgUnknown:"Merge state unknown",
- tab_all:"Open PRs",tab_fail:"CI-fail PRs",tab_conf:"Conflict PRs",tab_wait:"Needs-review PRs",tab_ready:"Mergeable PRs",tab_bp:"Backport PRs",tab_draft:"Draft PRs",tab_jira:"My Jira",tab_sdet:"My SDET Jira",
- tabd_all:"All your PRs that are not merged yet (drafts included)",tabd_fail:"PRs whose CI failed or errored; fix and re-run",tabd_conf:"PRs with conflicts against the base branch; rebase or resolve",
- tabd_wait:"Ready PRs waiting for a reviewer (drafts excluded)",tabd_ready:"GitHub says mergeable (no conflict, required checks pass, not behind base) and someone approved",
- tabd_bp:"Backport PRs that bring changes to release branches",tabd_draft:"Draft PRs that are not ready for review",tabd_jira:"Jira issues assigned to you that are In Progress",tabd_sdet:"Jira issues where you are the SDET and that are not done",
+ tab_all:"Open PRs",tab_fail:"CI-fail PRs",tab_ready:"Mergeable PRs",tab_torev:"Review-requested PRs",tab_jira:"Jira (Active)",tab_sdet:"SDET Jira",
+ tab_backlog:"Backlog Jira",
+ tabd_all:"All your PRs that are not merged yet (drafts included)",tabd_fail:"PRs whose CI failed or errored; fix and re-run",tabd_ready:"GitHub says mergeable (no conflict, required checks pass, not behind base) and someone approved",tabd_torev:"PRs requesting review from you or the Gateway SDETs team (review them or reassign)",
+ tabd_jira:"Jira issues assigned to you that are In Progress",tabd_sdet:"Jira issues where you are the SDET and that are not done",
+ tabd_backlog:"Jira issues assigned to you that are still in Backlog (sorted by priority)",
  noJira:"No Jira",origPr:n=>`Original PR #${n}`,botMade:"Created by bot",copyPr:"Copy PR link",copyJira:"Copy Jira link",copied:"Copied",
- updatedAgo:a=>`updated ${a} ago`,emptyPr:"No matching PRs",emptySdet:"No unfinished Jira where I'm SDET",emptyJira:"No In Progress Jira",
+ updatedAgo:a=>`updated ${a} ago`,emptyPr:"No matching PRs",emptySdet:"No unfinished Jira where I'm SDET",emptyJira:"No In Progress Jira",emptyBacklog:"No Backlog Jira",emptyTorev:"No PRs requesting your review",
  withDraft:n=>` (incl. ${n} draft)`,noLinked:"No linked PR",nMerged:n=>`${n} PR merged`,nDraft:n=>`${n} PR draft`,conflictTag:"⚠conflict",linkedPrs:"Linked PRs: ",
  metaLoad:"Refreshing…",metaErr:"Connection failed, retrying…",metaOk:(t,n)=>`Updated ${t} · refresh in ${n}s`,metaStale:a=>`Refreshing… (showing data from ${a} ago)`,
- jiraFail:"Jira refresh failed: ",refreshFail:"Refresh failed: ",connFail:"Cannot reach server: "}};
+ jiraFail:"Jira refresh failed: ",refreshFail:"Refresh failed: ",connFail:"Cannot reach server: ",
+ revReq:"Review requested",tipCi:"CI status:",tipReview:"Review status:",tipMerge:"Merge status:"}};
 let lang="zh";try{const v=localStorage.getItem("prwatch.lang");if(v==="zh"||v==="en")lang=v}catch(_){}
 const L=(k,...a)=>{const v=I18N[lang][k];return typeof v==="function"?v(...a):v};
 let listErr=null,connErr=null;
-function setErr(){const e=connErr?L("connFail")+connErr:(filter==="jira"||filter==="sdet")?(jiraErr&&L("jiraFail")+jiraErr):(listErr&&L("refreshFail")+listErr);$("err").innerHTML=e?`<div class="err">${esc(e)}</div>`:""}
+function setErr(){const e=connErr?L("connFail")+connErr:filter==="torev"?(torevErr&&L("refreshFail")+torevErr):(filter==="jira"||filter==="sdet")?(jiraErr&&L("jiraFail")+jiraErr):(listErr&&L("refreshFail")+listErr);$("err").innerHTML=e?`<div class="err">${esc(e)}</div>`:""}
 function applyLang(){document.documentElement.lang=lang;$("lang").textContent=L("switchTo");$("rf").title=L("refreshNow");$("rft").textContent=L("refresh")}
 function ci(p){return({SUCCESS:[L("ciOk"),"ok"],FAILURE:[L("ciFail"),"bad"],ERROR:[L("ciError"),"bad"],PENDING:[L("ciPending"),"warn"],EXPECTED:[L("ciExpected"),"warn"]})[p.ci]||[L("ciNone"),"gray"]}
 function rv(p){
@@ -276,15 +285,15 @@ function sev(p){ // 越大越需要关注
  if(["FAILURE","ERROR"].includes(p.ci))s+=4; if(p.merge==="CONFLICTING")s+=3; if(p.review==="CHANGES_REQUESTED")s+=2;
  if(ready(p))s=-1; // 可以 merge 了
  return s}
-const tabs=[["all",()=>true],["fail",p=>["FAILURE","ERROR"].includes(p.ci)],["conf",p=>p.merge==="CONFLICTING"],
- ["wait",p=>p.review==="REVIEW_REQUIRED"&&!p.draft],["ready",p=>sev(p)===-1],["bp",p=>p.backport!==null],["draft",p=>p.draft],
- ["jira",()=>false],["sdet",()=>false]];
+const tabs=[["all",()=>true],["fail",p=>["FAILURE","ERROR"].includes(p.ci)],["ready",p=>sev(p)===-1],["torev",p=>p.reviewRequested],
+ ["jira",()=>false],["sdet",()=>false],["backlog",()=>false]];
 function render(){
- const card=([k,f])=>`<div class="stat k-${k} ${filter===k?"on":""}" data-k="${k}" title="${esc(L("tabd_"+k))}"><b>${k==="jira"?jira.length:k==="sdet"?sdet.length:data.filter(f).length}</b><span>${L("tab_"+k)}</span></div>`;
- $("stats").innerHTML=tabs.filter(t=>t[0]!=="jira"&&t[0]!=="sdet").map(card).join("");
- $("stats2").innerHTML=tabs.filter(t=>t[0]==="jira"||t[0]==="sdet").map(card).join("");
+ const card=([k,f])=>`<div class="stat k-${k} ${filter===k?"on":""}" data-k="${k}" title="${esc(L("tabd_"+k))}"><b>${k==="jira"?jira.length:k==="sdet"?sdet.length:k==="backlog"?backlog.length:k==="torev"?torev.length:data.filter(f).length}</b><span>${L("tab_"+k)}</span></div>`;
+ $("stats").innerHTML=tabs.filter(t=>!["jira","sdet","backlog"].includes(t[0])).map(card).join("");
+ $("stats2").innerHTML=tabs.filter(t=>["jira","sdet","backlog"].includes(t[0])).map(card).join("");
  $("hint").textContent=L("tabd_"+filter);
- if(filter==="jira"||filter==="sdet")return renderJira();
+ if(["jira","sdet","backlog"].includes(filter))return renderJira();
+ if(filter==="torev")return renderTorev();
  const f=tabs.find(t=>t[0]===filter)[1];
  const rows=data.filter(f).sort((a,b)=>sev(b)-sev(a)||b.updatedAt.localeCompare(a.updatedAt));
  $("list").innerHTML=rows.length?rows.map(p=>{
@@ -295,15 +304,27 @@ function render(){
   return`<div class="pr"><div class="bar ${bar}"></div><div class="main">
    <div class="top"><span title="${esc(p.repo)} · ${esc(p.branch)}">${esc(p.repo.split("/").pop())}#${p.number}</span><button class="cp" data-url="${esc(p.url)}" title="${L("copyPr")}" aria-label="${L("copyPr")}">${CP}</button></div>
    <a class="title" href="${esc(p.url)}" target="_blank" title="${esc(p.title)}">${p.draft?"[Draft] ":""}${esc(p.title)}</a>
-   <div class="badges"><span class="b ${c[1]}">${c[0]}</span><span class="b ${r[1]}">${esc(r[0])}</span><span class="b ${m[1]}">${m[0]}</span>${jira}${bp}</div>
+   <div class="badges"><span class="b ${c[1]}" title="${L("tipCi")} ${esc(p.ci||"NONE")}"><span class="b ${r[1]}" title="${L("tipReview")} ${esc(p.review||"NONE")} · ${p.approvals} approve / ${p.changes} changes">${esc(r[0])}</span><span class="b ${m[1]}" title="${L("tipMerge")} ${esc(p.mergeState||"UNKNOWN")} · mergeable: ${esc(p.merge||"UNKNOWN")}">${m[0]}</span>${jira}${bp}</div>
   </div><div class="age">${L("updatedAgo",ago(Date.parse(p.updatedAt)))}</div></div>`}).join(""):`<div class="empty"># ${L("emptyPr")}</div>`}
 function setTitle(){ // 标签页窄，最重要的放最前: ✖CI失败 ⚠冲突 ✔可merge · 总数
  const n=(f)=>data.filter(f).length,fail=n(p=>["FAILURE","ERROR"].includes(p.ci)),conf=n(p=>p.merge==="CONFLICTING"),ready=n(p=>sev(p)===-1);
  const flags=[fail&&`✖${fail}`,conf&&`⚠${conf}`,ready&&`✔${ready}`].filter(Boolean).join(" ");
- document.title=(flags?flags+" · ":"")+`PR & JIRA Watch · ${data.length} PR`+(jira.length?` · ${jira.length} Jira`:"")+(sdet.length?` · ${sdet.length} SDET`:"")}
+ document.title=(flags?flags+" · ":"")+`PR & JIRA Watch · ${data.length} PR`+(jira.length?` · ${jira.length} Jira`:"")+(sdet.length?` · ${sdet.length} SDET`:"")+(backlog.length?` · ${backlog.length} Backlog`:"")+(torev.length?` · ${torev.length} 待Review`:"")}
+function renderTorev(){ // 待 Review 的 PR: 复用 PR 行(CI/review/merge 徽章都有意义)， Urgency 排序
+ const rows=torev.slice().sort((a,b)=>sev(b)-sev(a)||b.updatedAt.localeCompare(a.updatedAt));
+ $("list").innerHTML=rows.length?rows.map(p=>{
+  const c=ci(p),r=rv(p),m=mg(p),s=sev(p);
+  const bar=s===-1?"ok":s>=4?"bad":s>=1?"warn":"";
+  const jira=p.jira?(p.jiraUrl?`<a class="b" href="${esc(p.jiraUrl)}" target="_blank">◆ ${esc(p.jira)}</a>`:`<span class="b">◆ ${esc(p.jira)}</span>`):`<span class="b">${L("noJira")}</span>`;
+  return`<div class="pr"><div class="bar ${bar}"></div><div class="main">
+   <div class="top"><span title="${esc(p.repo)} · ${esc(p.branch)}">${esc(p.repo.split("/").pop())}#${p.number}</span><button class="cp" data-url="${esc(p.url)}" title="${L("copyPr")}" aria-label="${L("copyPr")}">${CP}</button></div>
+   <a class="title" href="${esc(p.url)}" target="_blank" title="${esc(p.title)}">${p.draft?"[Draft] ":""}${esc(p.title)}</a>
+   <div class="badges"><span class="b ${c[1]}" title="${L("tipCi")} ${esc(p.ci||"NONE")}"><span class="b ${r[1]}" title="${L("tipReview")} ${esc(p.review||"NONE")} · ${p.approvals} approve / ${p.changes} changes">${esc(r[0])}</span><span class="b ${m[1]}" title="${L("tipMerge")} ${esc(p.mergeState||"UNKNOWN")}">${m[0]}</span>${jira}</div>
+  </div><div class="age">${L("updatedAgo",ago(Date.parse(p.updatedAt)))}</div></div>`}).join(""):`<div class="empty"># ${L("emptyTorev")}</div>`}
 function stColor(s,cat){s=s.toUpperCase();return cat==="To Do"?"":s.includes("BLOCK")?"bad":s.includes("REVIEW")?"warn":"ok"}
 function renderJira(){
- const rows=filter==="sdet"?sdet:jira;
+ const rows=filter==="sdet"?sdet:filter==="backlog"?backlog:jira;
+ const isBk=filter==="backlog";
  $("list").innerHTML=rows.length?rows.map(j=>{
   const linked=j.key in jprs?jprs[j.key]:data.filter(p=>p.jira===j.key); // 优先用 Jira 自身关联的 PR
   const opn=linked.filter(p=>(p.state||"OPEN")==="OPEN"),live=opn.filter(p=>!p.draft); // 草稿算 open，但不参与 CI 汇总
@@ -311,25 +332,25 @@ function renderJira(){
   const nd=opn.length-live.length,dn=nd?L("withDraft",nd):"";
   const prb=!linked.length?`<span class="b">${L("noLinked")}</span>`:!opn.length?`<span class="b ok">${L("nMerged",linked.length)}</span>`:!live.length?`<span class="b">${L("nDraft",linked.length)}</span>`:`<span class="b ${fail?"bad":allok?"ok":"warn"}">${linked.length} PR ${fail?"✖":allok?"✔":"●"}${dn}</span>`;
   const links=linked.map(p=>{const st=p.state||"OPEN",c=ci(p),tag=st==="MERGED"?["merged","ok"]:st==="OPEN"?(p.draft?["draft","gray"]:[c[0].split(" ")[0],c[1]]):["closed","gray"];
-   return`<a href="${esc(p.url)}" target="_blank">${esc(p.repo.split("/").pop())}#${p.number}</a> <span style="color:var(--${tag[1]})">${tag[0]}</span>${p.merge==="CONFLICTING"?` <span style="color:var(--bad)">${L("conflictTag")}</span>`:""}`}).join(" · ");
+   return`<a href="${esc(p.url)}" target="_blank" title="${esc(p.title)}">${esc(p.repo.split("/").pop())}#${p.number}</a> <span style="color:var(--${tag[1]})" title="${L("tipCi")} ${esc(p.ci||"NONE")}">${tag[0]}</span>${p.merge==="CONFLICTING"?` <span style="color:var(--bad)">${L("conflictTag")}</span>`:""}`}).join(" · ");
   const bar=fail?"bad":"";
   return`<div class="pr"><div class="bar ${bar||"warn"}"></div><div class="main">
    <div class="top"><span>${esc(j.key)} · ${esc(j.type)}</span><button class="cp" data-url="${esc(j.url)}" title="${L("copyJira")}" aria-label="${L("copyJira")}">${CP}</button></div>
    <a class="title" href="${esc(j.url)}" target="_blank" title="${esc(j.summary)}">${esc(j.summary)}</a>
    <div class="badges"><span class="b ${stColor(j.status,j.category)}">${esc(j.status)}</span><span class="b">${esc(j.priority)}</span>${prb}</div>
-   ${links?`<div class="jl">${L("linkedPrs")}${links}</div>`:""}</div><div class="age"></div></div>`}).join(""):`<div class="empty"># ${L(filter==="sdet"?"emptySdet":"emptyJira")}</div>`}
+   ${links?`<div class="jl">${L("linkedPrs")}${links}</div>`:""}</div><div class="age"></div></div>`}).join(""):`<div class="empty"># ${L(filter==="sdet"?"emptySdet":isBk?"emptyBacklog":"emptyJira")}</div>`}
 let nextAt=0,state="load",me="";
 function tick(){ // 头部状态: 更新时间 + 下次刷新倒计时，刷新中/失败有不同颜色
  const p=$("pill");p.className="pill"+(state==="load"?" load":state==="err"?" err":"");
  $("meta").textContent=state==="load"?L("metaLoad"):state==="err"?L("metaErr"):L("metaOk",new Date(fetchedAt*1000).toLocaleTimeString(),Math.max(0,Math.round((nextAt-Date.now())/1000)));
  if(state==="load"&&fetchedAt)$("meta").textContent=L("metaStale",ago(fetchedAt*1000));
  $("rf").classList.toggle("spin",state==="load");
- $("sub").textContent=(me?`@${me} · `:"")+`${data.length} PR · ${jira.length} Jira · ${sdet.length} SDET`}
+ $("sub").textContent=(me?`@${me} · `:"")+`${data.length} PR · ${jira.length} Jira · ${sdet.length} SDET`+(backlog.length?` · ${backlog.length} Backlog`:"")+(torev.length?` · ${torev.length} 待Review`:"")}
 // 上次的数据: 浏览器 localStorage(秒开) + 服务端快照(换浏览器/服务重启后也有)，先显示它们，再等真正的刷新
 const LS="prwatch.snap";
-function apply(j){me=j.me||me;data=j.prs||[];jira=j.jira||[];sdet=j.sdet||[];jprs=j.jiraPrs||{};jiraErr=j.jiraError;fetchedAt=j.fetchedAt||0}
+function apply(j){me=j.me||me;data=j.prs||[];jira=j.jira||[];sdet=j.sdet||[];backlog=j.backlog||[];torev=j.torev||[];jprs=j.jiraPrs||{};jiraErr=j.jiraError;torevErr=j.torevError;fetchedAt=j.fetchedAt||0}
 function paint(){setTitle();render();tick()}
-function save(j){try{localStorage.setItem(LS,JSON.stringify({build:BUILD,prs:j.prs,jira:j.jira,sdet:j.sdet,jiraPrs:j.jiraPrs,fetchedAt:j.fetchedAt,me:j.me}))}catch(_){}}
+function save(j){try{localStorage.setItem(LS,JSON.stringify({build:BUILD,prs:j.prs,jira:j.jira,sdet:j.sdet,backlog:j.backlog,torev:j.torev,jiraPrs:j.jiraPrs,fetchedAt:j.fetchedAt,me:j.me}))}catch(_){}}
 function restore(){try{const j=JSON.parse(localStorage.getItem(LS));if(j&&j.build===BUILD&&Array.isArray(j.prs)){apply(j);paint()}}catch(_){}}
 async function preload(){try{const j=await (await fetch("/api/prs?cached=1")).json();
  if(!j.empty&&j.build===BUILD&&(j.fetchedAt||0)>fetchedAt){apply(j);paint()}}catch(_){}}

@@ -74,6 +74,9 @@ def color(s, c, on):
 BACKPORT_RE = re.compile(r"backport", re.I)
 ORIG_RE = re.compile(r"(?:Automated backport to .*? from #|Backport of \S*/pull/|Backport of #)(\d+)", re.I)
 
+# 「待Review PR」覆盖的 review 请求团队(gh 搜索 team-review-requested:ORG/SLUG)
+SDET_TEAM = "Kong/gateway-sdets"
+
 
 def is_backport(pr):
     return bool(BACKPORT_RE.search(pr["title"]) or pr["headRefName"].startswith("backport"))
@@ -92,6 +95,9 @@ JIRA_JQL = 'assignee = currentUser() AND statusCategory = "In Progress" ORDER BY
 
 # SDET 的工作常在开发开始前(Backlog/To Do)就分配给我，所以包含所有未完成(非 Done)的工单
 JIRA_JQL_SDET = 'SDET = currentUser() AND statusCategory != Done ORDER BY updated DESC'
+
+# 还压在 Backlog 里的工单(已分配给我但还没开始做的)
+JIRA_JQL_BACKLOG = 'assignee = currentUser() AND status = "Backlog" ORDER BY priority DESC, updated DESC'
 
 
 def fetch_jira(jql=JIRA_JQL):
@@ -151,16 +157,28 @@ def fetch_jira_prs(keys):
     返回 {key: [{url, repo, number, title, state, branch, base, ci, review, merge, draft, approvals}]}。"""
     now = time.time()
     stale = [k for k in keys if k not in _JPR_CACHE or now - _JPR_CACHE[k][0] > JPR_TTL]
-    if stale:
-        cmd = ["twg", "context", "jira", "workitem", *stale, "--since", "3650d", "--detail", "full",
+    got = {}
+    for i in range(0, len(stale), 20):  # twg 单批最多 20 个 identifier，多了直接报错
+        batch = stale[i:i + 20]
+        cmd = ["twg", "context", "jira", "workitem", *batch, "--since", "3650d", "--detail", "full",
                "--types", "ExternalPullRequest", "-o", "json", "--output-summary", "none"]
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
-        doc = json.loads(out.stdout)["data"]
-        items = doc["items"] if "items" in doc else [{"identifier": stale[0], "data": doc}]
-        got = {}
+        if out.returncode != 0:  # twg 失败时打印 {"ok":false,"error":{...}}，没有 data 字段
+            try:  # exit 1 时若能解析出错误信息就大声报出来，而不是让 KeyError 报个 'data'
+                raise RuntimeError("twg failed: " + str(json.loads(out.stdout).get("error", {}).get("message", out.stdout[:200])))
+            except ValueError:
+                raise RuntimeError("twg failed: " + (out.stderr or out.stdout).strip()[:200])
+        try:
+            doc = json.loads(out.stdout)
+            if doc.get("ok") is False:  # exit 0 但仍是错误包
+                raise RuntimeError("twg failed: " + str((doc.get("error") or {}).get("message", doc)))
+            doc = doc["data"]
+        except ValueError:
+            raise RuntimeError(f"twg returned non-JSON output: {out.stdout[:200]}")
+        items = doc.get("items") or [{"identifier": batch[0], "data": doc}]  # 单 key 时没有 items 包一层
         for it in items:
             prs = []
-            for rel in it.get("data", {}).get("relationships", []):
+            for rel in (it.get("data") or {}).get("relationships", []):  # 单个工单查询失败时 data 为 null，跳过而不是炸整批
                 for t in rel.get("targets", []):
                     m = PR_URL_RE.search(t.get("url") or "")
                     if not m:
@@ -173,7 +191,7 @@ def fetch_jira_prs(keys):
                                 "ci": "NONE", "review": None, "merge": None, "draft": st == "DRAFT", "approvals": 0})
             got[it["identifier"]] = sorted(prs, key=lambda p: p["number"])
         _enrich_prs([p for v in got.values() for p in v])
-        for k in stale:
+        for k in batch:
             _JPR_CACHE[k] = (now, got.get(k, []))
     return {k: _JPR_CACHE[k][1] for k in keys}
 
@@ -242,6 +260,17 @@ def fetch(org):
     for p in _search(f"{base} assignee:@me"):
         if p["url"] not in prs and is_backport(p):
             prs[p["url"]] = p
+    return sorted(prs.values(), key=lambda p: p["updatedAt"], reverse=True)
+
+
+def fetch_review_requested(org=None):
+    """请求我或 SDET 团队 review 的 open PR。独立于 fetch() 的主列表，
+    互不影响：主列表仍是自己的 PR，这份是「待我 review」的别人的 PR。"""
+    base = "is:pr is:open archived:false sort:updated-desc" + (f" org:{org}" if org else "")
+    prs = {}
+    for q in (f"{base} review-requested:@me", f"{base} team-review-requested:{SDET_TEAM}"):
+        for p in _search(q):
+            prs.setdefault(p["url"], p)
     return sorted(prs.values(), key=lambda p: p["updatedAt"], reverse=True)
 
 
