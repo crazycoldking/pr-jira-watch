@@ -85,7 +85,7 @@ Hover a card for its definition. The grey `#` line under the cards repeats it.
 | Open PRs | 未合并 PR | every open PR, drafts included |
 | CI-fail PRs | CI 失败 PR | CI is `FAILURE` / `ERROR` |
 | Mergeable PRs | 可合并 PR | passes the [mergeable rule](#the-mergeable-rule) |
-| Jira (Active) | Jira（工作中） | assignee = me, In Progress |
+| Jira In Progress | Jira（工作中） | assignee = me, In Progress |
 | SDET Jira | SDET Jira | SDET = me, not Done |
 | Backlog Jira | Backlog 的 Jira | assignee = me, status = Backlog |
 

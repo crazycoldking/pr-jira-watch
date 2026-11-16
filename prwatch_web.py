@@ -256,7 +256,7 @@ en:{loading:"Loading…",refresh:"Refresh",refreshNow:"Refresh now",switchTo:"�
  rvChanges:n=>`✖ Changes requested (${n})`,rvRequired:"… Review needed",rvNone:"No review",
  mgConflict:"⚠ Conflict",mgDraft:"Draft, not mergeable",mgReady:"Mergeable",mgBehind:"Behind base, update needed",mgBlocked:"Merge requirements not met",
  mgUnstable:"Some checks failing",mgHooks:"Pre-merge checks pending",mgClean:"No conflict, needs approval",mgUnknown:"Merge state unknown",
- tab_all:"Open PRs",tab_fail:"CI-fail PRs",tab_ready:"Mergeable PRs",tab_torev:"Review-requested PRs",tab_jira:"Jira (Active)",tab_sdet:"SDET Jira",
+ tab_all:"Open PRs",tab_fail:"CI-fail PRs",tab_ready:"Mergeable PRs",tab_torev:"Review-requested PRs",tab_jira:"Jira In Progress",tab_sdet:"SDET Jira",
  tab_backlog:"Backlog Jira",
  tabd_all:"All your PRs that are not merged yet (drafts included)",tabd_fail:"PRs whose CI failed or errored; fix and re-run",tabd_ready:"GitHub says mergeable (no conflict, required checks pass, not behind base) and someone approved",tabd_torev:"PRs requesting review from you or the Gateway SDETs team (review them or reassign)",
  tabd_jira:"Jira issues assigned to you that are In Progress",tabd_sdet:"Jira issues where you are the SDET and that are not done",
