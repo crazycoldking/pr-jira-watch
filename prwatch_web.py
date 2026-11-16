@@ -251,7 +251,7 @@ zh:{loading:"加载中…",refresh:"刷新",refreshNow:"立即刷新",switchTo:"
  metaLoad:"刷新中…",metaErr:"连接失败，重试中…",metaOk:(t,n)=>`更新于 ${t} · ${n}s 后刷新`,metaStale:a=>`刷新中…（当前显示 ${a} 前的数据）`,
  jiraFail:"Jira 刷新失败: ",refreshFail:"刷新失败: ",connFail:"无法连接服务: ",
  grpPr:"PRs",grpJira:"JIRAs", revReq:"待Review",tipCi:"CI 状态:",tipReview:"Review 状态:",tipMerge:"合并状态:"},
-en:{loading:"Loading…",refresh:"Refresh",refreshNow:"Refresh now",switchTo:"中文",
+en:{loading:"Loading…",refresh:"Refresh",refreshNow:"Refresh now",switchTo:"CN",
  ciOk:"✔ CI passed",ciFail:"✖ CI failed",ciError:"✖ CI error",ciPending:"● CI running",ciExpected:"● CI waiting",ciNone:"CI none",
  rvChanges:n=>`✖ Changes requested (${n})`,rvRequired:"… Review needed",rvNone:"No review",
  mgConflict:"⚠ Conflict",mgDraft:"Draft, not mergeable",mgReady:"Mergeable",mgBehind:"Behind base, update needed",mgBlocked:"Merge requirements not met",
@@ -317,7 +317,7 @@ function render(){
 function setTitle(){ // 标签页窄，最重要的放最前: ✖CI失败 ⚠冲突 ✔可merge · 总数
  const n=(f)=>data.filter(f).length,fail=n(p=>["FAILURE","ERROR"].includes(p.ci)),conf=n(p=>p.merge==="CONFLICTING"),ready=n(p=>sev(p)===-1);
  const flags=[fail&&`✖${fail}`,conf&&`⚠${conf}`,ready&&`✔${ready}`].filter(Boolean).join(" ");
- document.title=(flags?flags+" · ":"")+`PR & JIRA Watch · ${data.length} PR`+(jira.length?` · ${jira.length} Jira`:"")+(sdet.length?` · ${sdet.length} SDET`:"")+(backlog.length?` · ${backlog.length} Backlog`:"")+(torev.length?` · ${torev.length} 待Review`:"")}
+ document.title=(flags?flags+" · ":"")+`PR & JIRA Watch · ${data.length} PR`+(jira.length?` · ${jira.length} Jira`:"")+(sdet.length?` · ${sdet.length} SDET`:"")+(backlog.length?` · ${backlog.length} Backlog`:"")+(torev.length?` · ${torev.length} ${L("revReq")}`:"")}
 function renderTorev(){ // 待 Review 的 PR: 复用 PR 行(CI/review/merge 徽章都有意义)， Urgency 排序
  const rows=torev.slice().sort((a,b)=>sev(b)-sev(a)||b.updatedAt.localeCompare(a.updatedAt));
  $("list").innerHTML=rows.length?rows.map(p=>{
@@ -353,7 +353,7 @@ function tick(){ // 头部状态: 更新时间 + 下次刷新倒计时，刷新�
  $("meta").textContent=state==="load"?L("metaLoad"):state==="err"?L("metaErr"):L("metaOk",new Date(fetchedAt*1000).toLocaleTimeString(),Math.max(0,Math.round((nextAt-Date.now())/1000)));
  if(state==="load"&&fetchedAt)$("meta").textContent=L("metaStale",ago(fetchedAt*1000));
  $("rf").classList.toggle("spin",state==="load");
- $("sub").textContent=(me?`@${me} · `:"")+`${data.length} PR · ${jira.length} Jira · ${sdet.length} SDET`+(backlog.length?` · ${backlog.length} Backlog`:"")+(torev.length?` · ${torev.length} 待Review`:"")}
+ $("sub").textContent=(me?`@${me} · `:"")+`${data.length} PR · ${jira.length} Jira · ${sdet.length} SDET`+(backlog.length?` · ${backlog.length} Backlog`:"")+(torev.length?` · ${torev.length} ${L("revReq")}`:"")}
 // 上次的数据: 浏览器 localStorage(秒开) + 服务端快照(换浏览器/服务重启后也有)，先显示它们，再等真正的刷新
 const LS="prwatch.snap";
 function apply(j){me=j.me||me;data=j.prs||[];jira=j.jira||[];sdet=j.sdet||[];backlog=j.backlog||[];torev=j.torev||[];jprs=j.jiraPrs||{};jiraErr=j.jiraError;torevErr=j.torevError;fetchedAt=j.fetchedAt||0}
