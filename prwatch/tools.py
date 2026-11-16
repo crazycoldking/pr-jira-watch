@@ -5,21 +5,34 @@ error handling, timeouts and JSON parsing stay consistent.
 """
 import json
 import subprocess
+import time
 
 
 class ToolError(RuntimeError):
     """An external CLI failed (non-zero exit, bad JSON, timeout)."""
 
 
+_TRANSIENT = ("HTTP 502", "HTTP 503", "HTTP 504", "stream error", "connection reset",
+              "EOF", "timeout", "temporarily unavailable")
+RETRIES = 3
+
+
 def run(cmd, timeout=None, check=True):
     """Run a command, return stdout as text. On failure raise ToolError
-    with whatever message the tool printed (stderr preferred)."""
-    try:
-        out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired as e:
-        raise ToolError(f"{cmd[0]} timed out after {timeout}s") from e
-    if check and out.returncode != 0:
+    with whatever message the tool printed (stderr preferred).
+    gh calls are retried with backoff on transient GitHub 5xx errors."""
+    attempts = RETRIES if cmd and cmd[0] == "gh" else 1
+    for i in range(attempts):
+        try:
+            out = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        except subprocess.TimeoutExpired as e:
+            raise ToolError(f"{cmd[0]} timed out after {timeout}s") from e
+        if out.returncode == 0 or not check:
+            return out.stdout
         msg = (out.stderr or out.stdout).strip()
+        if i < attempts - 1 and any(t.lower() in msg.lower() for t in _TRANSIENT):
+            time.sleep(1.5 * (i + 1))
+            continue
         raise ToolError(msg or f"{cmd[0]} exited {out.returncode}")
     return out.stdout
 
