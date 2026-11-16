@@ -57,22 +57,7 @@ def load_snap():
         SNAP = None
 
 
-def to_item(pr, jira_url):
-    reviews = pr["latestOpinionatedReviews"]["nodes"]
-    jira = prwatch.find_jira(pr)
-    return {
-        "repo": pr["repository"]["nameWithOwner"], "number": pr["number"],
-        "title": pr["title"], "url": pr["url"], "draft": pr["isDraft"],
-        "branch": pr["headRefName"], "updatedAt": pr["updatedAt"],
-        "ci": prwatch.ci_state(pr), "review": pr["reviewDecision"],
-        "approvals": sum(r["state"] == "APPROVED" for r in reviews),
-        "changes": sum(r["state"] == "CHANGES_REQUESTED" for r in reviews),
-        "merge": pr["mergeable"], "mergeState": pr["mergeStateStatus"],
-        "backport": prwatch.backport_of(pr), "base": pr["baseRefName"],
-        "bot": pr["author"]["login"] != prwatch.me(),
-        "jira": jira,
-        "jiraUrl": f"{jira_url.rstrip('/')}/browse/{jira}" if jira and jira_url else None,
-    }
+to_item = prwatch.item_from_pr  # shared raw-PR -> item normalization (prwatch/classify.py)
 
 
 def get_data(org, jira_url, ttl):
@@ -80,20 +65,19 @@ def get_data(org, jira_url, ttl):
     with LOCK:
         if time.time() - CACHE["ts"] >= ttl:
             try:
-                CACHE["data"] = [to_item(p, jira_url) for p in prwatch.fetch(org)]
+                CACHE["data"] = [to_item(p, jira_url, prwatch.me()) for p in prwatch.fetch(org)]
                 CACHE["err"] = None
             except Exception as e:
                 CACHE["err"] = str(e)
             try:  # 待 Review 的 PR 独立抓取与容错，不影响自己的 PR 列表
-                CACHE["torev"] = [to_item(p, jira_url) for p in prwatch.fetch_review_requested(org)]
+                CACHE["torev"] = [to_item(p, jira_url, prwatch.me()) for p in prwatch.fetch_review_requested(org)]
                 CACHE["terr"] = None
             except Exception as e:
                 CACHE["terr"] = str(e)
             try:  # Jira 单独容错，失败不影响 PR 列表
                 site = (jira_url or prwatch.jira_site() or "").rstrip("/")
-                CACHE["jira"] = [dict(j, url=f"{site}/browse/{j['key']}") for j in prwatch.fetch_jira()]
-                CACHE["sdet"] = [dict(j, url=f"{site}/browse/{j['key']}") for j in prwatch.fetch_jira(prwatch.JIRA_JQL_SDET)]
-                CACHE["backlog"] = [dict(j, url=f"{site}/browse/{j['key']}") for j in prwatch.fetch_jira(prwatch.JIRA_JQL_BACKLOG)]
+                views = prwatch.jira.fetch_all(site)
+                CACHE["jira"], CACHE["sdet"], CACHE["backlog"] = views["active"], views["sdet"], views["backlog"]
                 CACHE["jerr"] = None
                 try:  # 关联 PR 取自 Jira 自身的 development 信息(不限作者)
                     CACHE["jprs"] = prwatch.fetch_jira_prs(list({j["key"] for j in CACHE["jira"] + CACHE["sdet"]}))

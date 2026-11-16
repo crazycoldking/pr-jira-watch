@@ -39,38 +39,9 @@ SDET_TAB = JIRA_TAB + 1
 N_TABS = len(TABS) + 2
 
 
-def is_ready(p):
-    return prwatch.is_ready(p["draft"], p.get("mergeState"), p["review"], p["approvals"], p.get("changes", 0))
-
-
 def sev(p):
-    """越大越需要关注；-1 表示 prwatch.is_ready (GitHub 判定 CLEAN 且已 approve)，可以 merge。"""
-    if p["draft"]:
-        return 0
-    s = 1
-    if p["ci"] in ("FAILURE", "ERROR"):
-        s += 4
-    if p["merge"] == "CONFLICTING":
-        s += 3
-    if p["review"] == "CHANGES_REQUESTED":
-        s += 2
-    if is_ready(p):
-        s = -1
-    return s
-
-
-def to_item(pr, jira_url):
-    nodes = pr["latestOpinionatedReviews"]["nodes"]
-    jira = prwatch.find_jira(pr)
-    return {
-        "raw": pr, "url": pr["url"], "repo": pr["repository"]["nameWithOwner"], "number": pr["number"],
-        "title": pr["title"], "draft": pr["isDraft"], "branch": pr["headRefName"], "base": pr["baseRefName"],
-        "updatedAt": pr["updatedAt"], "ci": prwatch.ci_state(pr), "review": pr["reviewDecision"],
-        "approvals": sum(r["state"] == "APPROVED" for r in nodes),
-        "changes": sum(r["state"] == "CHANGES_REQUESTED" for r in nodes),
-        "merge": pr["mergeable"], "mergeState": pr["mergeStateStatus"], "backport": prwatch.backport_of(pr), "jira": jira,
-        "jiraUrl": f"{jira_url.rstrip('/')}/browse/{jira}" if jira and jira_url else None,
-    }
+    """越大越需要关注；-1 表示可合并 (classify.is_ready)。值已由 item_from_pr 预算好。"""
+    return p["severity"]
 
 
 # ---------- 文本宽度(中文占 2 列) ----------
@@ -153,7 +124,7 @@ class App:
                 raw = prwatch.fetch(self.a.org)
                 if not self.a.no_notify:
                     self.prev = prwatch.check_changes(raw, self.prev)
-                items = [to_item(p, self.a.jira_url) for p in raw]
+                items = [prwatch.item_from_pr(p, self.a.jira_url, prwatch.me()) for p in raw]
                 with self.lock:
                     self.items, self.err, self.fetched = items, None, time.time()
             except Exception as e:
@@ -161,8 +132,8 @@ class App:
                     self.err = str(e)
             try:  # Jira 单独容错，失败不影响 PR 列表
                 base = self.a.jira_url.rstrip("/")
-                mine = [dict(j, url=f"{base}/browse/{j['key']}") for j in prwatch.fetch_jira()]
-                sdet = [dict(j, url=f"{base}/browse/{j['key']}") for j in prwatch.fetch_jira(prwatch.JIRA_JQL_SDET)]
+                mine = [dict(j, url=f"{base}/browse/{j['key']}") for j in prwatch.fetch_jira(prwatch.config.JQL_ACTIVE)]
+                sdet = [dict(j, url=f"{base}/browse/{j['key']}") for j in prwatch.fetch_jira(prwatch.config.JQL_SDET)]
                 with self.lock:
                     self.jira, self.sdet, self.jira_err = mine, sdet, None
                 try:  # 关联 PR 取自 Jira 自身的 development 信息；失败时退回到"我自己的 PR 按 Jira 号匹配"

@@ -12,7 +12,7 @@ Pure Python 3 stdlib. It shells out to `gh`, `acli` and `twg`, so it reuses the 
 |---|---|---|
 | Web | `prwatch_web.py` | Dark CRT-style dashboard on `127.0.0.1:8765`, bilingual (EN / 中文) |
 | TUI | `prwatch_tui.py` | `curses` UI. Also owns desktop notifications |
-| CLI | `prwatch.py` | Plain table, `--once` for scripts. Shared core for the other two |
+| CLI | `prwatch.py` | Plain table, `--once` for scripts. Uses the shared `prwatch/` package |
 
 ## Screenshot
 
@@ -127,7 +127,7 @@ Now green means `ready`, and anything else says what is blocking:
 | clean, nobody approved | `No conflict, needs approval` | `no-approve` |
 | GitHub has not computed it yet | `Merge state unknown` | `?` |
 
-One implementation for CLI and TUI: `prwatch.is_ready()` / `prwatch.merge_cell()`. The web UI mirrors it in JS (`ready()` / `mg()`), so change both together.
+One implementation for CLI and TUI: `prwatch.classify.is_ready()` / `prwatch.classify.merge_cell()`. The web UI mirrors it in JS (`ready()` / `mg()`), so change both together.
 
 ## TUI
 
@@ -184,13 +184,26 @@ Binds to `127.0.0.1` only. A 15s server-side cache means ten open tabs cost one 
 
 ```
 .
-├── start.sh            # tmux launcher
-├── prwatch.py          # core: queries, Jira key guess, backport detection, mergeable rule, notify, CLI
-├── prwatch_tui.py      # curses UI + notifier loop
-├── prwatch_web.py      # http.server + single-file SPA (EN / 中文 strings live in its I18N table)
-├── logo.png            # header logo, favicon source (drop a logo.local.png next to it to override, gitignored)
-└── docs/               # README screenshot
+├── start.sh              # tmux launcher
+├── prwatch/              # shared core package (data + rules, no UI code)
+│   ├── config.py         # every tunable + every JQL (PRWATCH_* env overrides)
+│   ├── tools.py          # shell-out helpers: gh / acli / twg all go through here
+│   ├── github.py         # GitHub search (my PRs, review-requested PRs) + enrichment
+│   ├── jira.py           # Jira searches (acli) + linked PRs (twg, cached)
+│   ├── classify.py       # shared rules: mergeable, severity, Jira-key guess,
+│   │                     #   backport detection, raw-PR -> item normalization
+│   ├── notify.py         # desktop toasts + transition detection
+│   └── textutil.py       # ANSI / CJK-width / age helpers
+├── prwatch.py            # CLI entry: table rendering only
+├── prwatch_tui.py        # curses UI + notifier loop
+├── prwatch_web.py        # http.server + single-file SPA (EN / CN strings live in its I18N table)
+├── logo.png              # header logo, favicon source (drop a logo.local.png next to it to override, gitignored)
+└── docs/                 # README screenshot
 ```
+
+Business rules live in the package so a change lands once and the CLI, TUI and
+web agree. The web `ready()` rule is still mirrored in JS by design (it has to
+be edited together with `prwatch.classify.is_ready`).
 
 ## Troubleshooting
 
